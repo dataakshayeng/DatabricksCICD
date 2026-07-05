@@ -38,7 +38,12 @@ def delete_workspace_path(host: str, token: str, path: str) -> None:
         api_request(host, token, "POST", "/workspace/delete", {"path": path, "recursive": True})
     except RuntimeError as exc:
         message = str(exc).lower()
-        if "not found" in message or "does not exist" in message or "resource does not exist" in message:
+        if "404" in message and (
+            "resource_does_not_exist" in message
+            or "resource does not exist" in message
+            or "path (" in message
+            or "doesn't exist" in message
+        ):
             return
         raise
 
