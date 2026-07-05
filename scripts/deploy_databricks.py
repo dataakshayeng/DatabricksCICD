@@ -1,8 +1,10 @@
+import argparse
 import base64
 import json
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 from urllib import error, request
 
 
@@ -26,7 +28,22 @@ def api_request(host: str, token: str, method: str, endpoint: str, data: dict | 
             return {}
     except error.HTTPError as exc:
         details = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Databricks API request failed: {exc.code} {details}") from exc
+        parsed_details = _parse_databricks_error(details)
+        raise RuntimeError(
+            f"Databricks API request failed: {exc.code} {endpoint} {parsed_details}"
+        ) from exc
+
+
+def _parse_databricks_error(payload: str) -> str:
+    try:
+        error_json = json.loads(payload)
+        if isinstance(error_json, dict):
+            message = error_json.get("message")
+            if message:
+                return message
+        return payload
+    except json.JSONDecodeError:
+        return payload
 
 
 def ensure_workspace_path(host: str, token: str, path: str) -> None:
@@ -93,14 +110,36 @@ def deploy_directory(host: str, token: str, source_dir: Path, workspace_root: st
         print(f"Uploaded {path} -> {workspace_path}")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Deploy local files to Azure Databricks workspace")
+    parser.add_argument("--source", default=os.getenv("SOURCE_FOLDER", "databricks"), help="Local source directory")
+    parser.add_argument(
+        "--workspace-path",
+        default=os.getenv("DATABRICKS_WORKSPACE_PATH", "/Production"),
+        help="Destination Databricks workspace path",
+    )
+    parser.add_argument(
+        "--host",
+        default=os.getenv("DATABRICKS_HOST", ""),
+        help="Databricks workspace host",
+    )
+    parser.add_argument(
+        "--token",
+        default=os.getenv("DATABRICKS_TOKEN", ""),
+        help="Databricks access token",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
-    source = os.getenv("SOURCE_FOLDER", "databricks")
-    workspace_path = os.getenv("DATABRICKS_WORKSPACE_PATH", "/Production")
-    host = os.getenv("DATABRICKS_HOST", "").strip()
-    token = os.getenv("DATABRICKS_TOKEN", "").strip()
+    args = parse_args()
+    source = args.source
+    workspace_path = args.workspace_path
+    host = args.host.strip()
+    token = args.token.strip()
 
     if not host or not token:
-        print("Missing DATABRICKS_HOST or DATABRICKS_TOKEN environment variables", file=sys.stderr)
+        print("Missing DATABRICKS_HOST or DATABRICKS_TOKEN environment variables or arguments", file=sys.stderr)
         return 1
 
     if not host.startswith("http"):
