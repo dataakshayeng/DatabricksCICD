@@ -1,0 +1,31 @@
+name: Deploy to Azure Databricks
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      DATABRICKS_WORKSPACE_PATH: /Production
+      SOURCE_FOLDER: databricks
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Deploy repository contents to Databricks workspace
+        run: |
+          python scripts/deploy_databricks.py \
+            --source "$SOURCE_FOLDER" \
+            --workspace-path "$DATABRICKS_WORKSPACE_PATH"
